@@ -15,6 +15,7 @@ Chassis stack (`s2_chassis_ws`) is owned by the chassis bring-up owner. **Do not
 | Chassis SBC | linux (3588) | `192.168.111.35` | `linux` / `linux` |
 
 ROS 2 **Jazzy**, `RMW_IMPLEMENTATION=rmw_zenoh_cpp`, `ROS_DOMAIN_ID=0`.  
+Zenoh **router** on W2-0035 (`rmw_zenohd`); chassis Distrobox is a **client** of `192.168.111.223:7447`.  
 Head camera: **Orbbec Gemini 336L** (`CPC6463000WX`), topic `/camera_head/color/image_raw`.  
 Do **not** run DualVLN on W2-0035 (RTX 4060, 8 GB).
 
@@ -22,7 +23,7 @@ Do **not** run DualVLN on W2-0035 (RTX 4060, 8 GB).
 
 | File | Use |
 |------|-----|
-| [`Quick_Start.md`](Quick_Start.md) | **Runtime only** — SSH, chassis launch, DualVLN server, camera, dry-run / live |
+| [`Quick_Start.md`](Quick_Start.md) | **Runtime only** — W2 Zenoh router, chassis Distrobox (client + `publish_robot_state:=false`), DualVLN, camera, dry-run / live |
 | [`docs/Installation_Guide.md`](docs/Installation_Guide.md) | Clone InternNav, conda, DualVLN weights, copy this repo’s scripts |
 | [`docs/Architecture.md`](docs/Architecture.md) | Three-machine pipeline, Zenoh vs HTTP, action codes |
 | [`docs/W2_Implementation.md`](docs/W2_Implementation.md) | Camera, rqt, chassis Distrobox, pitfalls |
@@ -46,4 +47,9 @@ If InternNav + DualVLN are already installed on Sim-06, open [`Quick_Start.md`](
 
 ## Related
 
-Lift2S uses a separate integration: `internnav_arx_lift2s` (RealSense + different bridge). Do not mix ports with H1 eval (`h1_internvla_n1_async_cfg.py` uses **8023**). LightNav-0 is a different model (`~/LightNav-0`).
+Lift2S uses a separate integration: `internnav_arx_lift2s` (RealSense + different bridge). Do not mix ports with H1 eval (`h1_internvla_n1_async_cfg.py` uses **8023**). LightNav-0 on this robot is **`~/LightNav-W2`** (WebSocket `:8051`, not this DualVLN client). Single-GPU DualVLN train notes: [`docs/Fine_Tune_A6000.md`](docs/Fine_Tune_A6000.md).
+
+
+## Demo
+
+[W2 DualVLN demo (mp4)](docs/media/InternNav-W2.mp4)
