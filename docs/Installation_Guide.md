@@ -61,7 +61,14 @@ source ~/ros2_ws/install/setup.bash
 
 ## 5. Chassis
 
-On `192.168.111.35`, Distrobox `ubuntu24` and `~/s2_chassis_ws` must already be built by the chassis owner. This repo does not install them.
+On `192.168.111.61`, Distrobox `ubuntu24` and `~/s2_chassis_ws` must already be built by the chassis owner. This repo does not install them.
+
+Runtime (see [`../Quick_Start.md`](../Quick_Start.md)): start `rmw_zenohd` on W2-0035 first. In Distrobox, `ZENOH_CONFIG_OVERRIDE` must target `tcp/192.168.111.223:7447`, then:
+
+```bash
+ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
+  can_iface:=bcan0 publish_robot_state:=false
+```
 
 ## 6. LAN HTTP
 

@@ -4,16 +4,24 @@ Details that do not belong in the command-only [`Quick_Start.md`](../Quick_Start
 
 ## Chassis (孟子云)
 
-To have `/chassis/*` and `/cmd_vel` on W2-0035:
+Linkhou `s2_chassis_ws` is owned by the chassis bring-up owner. **Do not edit it** unless they ask.
 
-1. `ssh linux@192.168.111.35` (password `linux`)
-2. `distrobox enter ubuntu24`
-3. `source ~/s2_chassis_ws/install/setup.bash`
-4. `ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0`
+After their 2026-09 graph change, W2 must run the Zenoh **router first**, and the 3588 must join as a **client** of `192.168.111.223:7447`. Launch with `publish_robot_state:=false`. Full command order: [`../Quick_Start.md`](../Quick_Start.md) **Z1 then C1**.
 
-Do **not** edit `s2_chassis_ws`. If W2 still has no chassis topics, the 3588 Zenoh **client** must `connect` to the **router** (often W2-0035 `192.168.111.223:7447`). Leftover `ZENOH_CONFIG_OVERRIDE` pointing at another PC (e.g. `192.168.111.115`) breaks discovery — `unset` it on W2.
+1. On W2-0035: `ros2 run rmw_zenoh_cpp rmw_zenohd` (one process only).
+2. `ssh linux@192.168.111.61` (password `linux`) → `distrobox enter ubuntu24`.
+3. Stop any previous chassis launch.
+4. `echo "$ZENOH_CONFIG_OVERRIDE"` must be  
+   `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`.  
+   If not: `source ~/s2_chassis_ws/.bashrc` **or** `export CHASSIS_ZENOH_REMOTE=1` then `source ~/s2_chassis_ws/config/chassis_env.conf`.
+5. `source ~/s2_chassis_ws/install/setup.bash`
+6. `ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0 publish_robot_state:=false`
 
-Default launch may start its own `rmw_zenohd` on W2 when the camera comes up first. One router only.
+On W2 you should then see `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`, plus `/chassis/imu`, `/chassis/status`, `/cmd_vel_joy`, `/relative_goal_cmd`, and the other `/chassis/*` names in Quick Start.
+
+Do **not** `unset ZENOH_CONFIG_OVERRIDE` on the 3588 (that would drop the client endpoint). **Do** `unset` it on W2 so the IPC stays the router, not a leftover client of `192.168.111.115`.
+
+Two `rmw_zenohd` instances on 7447 will fail or split the graph. Camera launch should log `Detected running rmw_zenohd` and continue.
 
 ## Camera
 

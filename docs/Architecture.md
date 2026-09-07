@@ -43,6 +43,10 @@ Dry-run with a parked robot does **not** prove object search: the image never ch
 
 ## Zenoh
 
-One router on the shared graph (often started by the camera launch on W2-0035 at `192.168.111.223:7447`). Chassis is a **client** of that router. Two `rmw_zenohd` instances on 7447 will fail or split the graph.
+**Router:** W2-0035, `ros2 run rmw_zenoh_cpp rmw_zenohd`, typically `tcp/192.168.111.223:7447`. Start this **before** the chassis launch. The camera launch should attach to the existing router (`Detected running rmw_zenohd`).
+
+**Client:** 3588 Distrobox. `ZENOH_CONFIG_OVERRIDE` must be `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]` (`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` env files). Launch with `publish_robot_state:=false`.
+
+Two `rmw_zenohd` instances on 7447 will fail or split the graph. Do not `unset ZENOH_CONFIG_OVERRIDE` on the chassis.
 
 H1 Docker eval uses a **different** InternNav config and port **8023**. Lift2S / W2 DualVLN stay on **8087**.

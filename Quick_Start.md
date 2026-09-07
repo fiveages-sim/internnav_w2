@@ -4,15 +4,16 @@
 
 | ID | Machine | Prompt | Role |
 |----|---------|--------|------|
-| **C1** | Chassis | `linux@linux` then Distrobox | Linkhou launch |
+| **Z1** | W2-0035 | `fiveages@W2-0035` | Zenoh **router** (`rmw_zenohd`) |
+| **C1** | Chassis | `linux@linux` then Distrobox | Linkhou launch (Zenoh **client**) |
 | **S1** | Sim-06 | `fiveages@Sim-06` | DualVLN `:8087` |
 | **W1** | W2-0035 | `fiveages@W2-0035` | Head camera |
 | **W2** | W2-0035 | `fiveages@W2-0035` | Bridge / `hz` / `curl` |
 | **W3** | W2 desktop (NoMachine) | `fiveages@W2-0035` | `rqt_image_view` |
 
-Dry-run and live **must** run on **W2-0035**, not Sim-06. E-stop before live. `--no-tuck`. Do not start a second `rmw_zenohd` if one is already up.
+Dry-run and live **must** run on **W2-0035**, not Sim-06. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis launch. Do not start a second router (camera launch will reuse the running one).
 
-**Suggested order:** C1 chassis → S1 server → SSH to W2 → W1 camera → W2 check topics → dry-run → live.
+**Suggested order:** Z1 Zenoh router → C1 chassis → S1 server → W1 camera → W2 check topics → dry-run → live.
 
 ---
 
@@ -26,32 +27,112 @@ ssh fiveages@192.168.111.223
 
 Username `fiveages`, password `123456`.
 
-
-Prompt must become `fiveages@W2-0035`. Open **two** SSH sessions (camera + bridge).
+Prompt must become `fiveages@W2-0035`. Open **three** SSH sessions (Zenoh + camera + bridge).
 
 **Chassis:**
 
 ```bash
-ssh linux@192.168.111.35
+ssh linux@192.168.111.61
 ```
 
 Username `linux`, password `linux`. Prompt `linux@linux`.
 
 ---
 
-## C1 — Chassis (3588)
+## Z1 — Zenoh router (W2-0035)
 
-On the chassis SSH session:
+Prompt: `fiveages@W2-0035`. Leave running. The 3588 connects **to this host** (`192.168.111.223:7447`).
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+unset ZENOH_CONFIG_OVERRIDE
+export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+export ROS_DOMAIN_ID=0
+
+ros2 run rmw_zenoh_cpp rmw_zenohd
+```
+
+Expect a line that Zenoh can be reached at `tcp/192.168.111.223:7447`. Do **not** start another `rmw_zenohd` in W1 or W2.
+
+---
+
+## C1 — Chassis (3588 Distrobox)
+
+On the chassis SSH session. **Wait for Distrobox** after `distrobox enter` before the next lines. Do not `exit` the container.
 
 ```bash
 distrobox enter ubuntu24
-source ~/s2_chassis_ws/install/setup.bash
-ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0
 ```
 
-Leave this running. Do not edit `s2_chassis_ws`.
+Stop any old chassis launch (`Ctrl+C` in that Distrobox) so only one `chassis_ros2_control` is running.
 
-On W2 you should later see `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states` (same graph as the camera).
+Confirm the 3588 is a Zenoh **client** of W2:
+
+```bash
+echo "$ZENOH_CONFIG_OVERRIDE"
+```
+
+It should look like:
+
+```text
+mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]
+```
+
+If it is empty, still has `mode="peer"`, or points at another PC (e.g. `192.168.111.115`):
+
+```bash
+source ~/s2_chassis_ws/.bashrc
+```
+
+or:
+
+```bash
+export CHASSIS_ZENOH_REMOTE=1
+source ~/s2_chassis_ws/config/chassis_env.conf
+```
+
+Then:
+
+```bash
+# echo "$ZENOH_CONFIG_OVERRIDE"
+# source ~/s2_chassis_ws/install/setup.bash
+# export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+# export ROS_DOMAIN_ID=0
+
+ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
+  can_iface:=bcan0 publish_robot_state:=false
+```
+
+You should receive `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`
+
+Leave this running. Do not edit `s2_chassis_ws` except as the chassis owner documents.
+
+On W2 (after Z1 + C1), `ros2 topic list` should include at least `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`. A healthy chassis-only graph looks like:
+
+```text
+/chassis/auto_mode_enabled
+/chassis/battery
+/chassis/controller_state
+/chassis/drive_policy_fsm
+/chassis/dynamic_joint_states
+/chassis/imu
+/chassis/joint_states
+/chassis/motion_pause
+/chassis/motor_lifetime
+/chassis/move_relative
+/chassis/move_relative_done
+/chassis/odom
+/chassis/robot_description
+/chassis/status
+/chassis/ultrasonic
+/cmd_vel
+/cmd_vel_joy
+/relative_goal_cmd
+/tf
+```
+
+(`publish_robot_state:=false` avoids a second robot_state_publisher fighting the upper-body stack.)
 
 ---
 
@@ -71,7 +152,9 @@ Leave running. Expect `Uvicorn running on http://0.0.0.0:8087`.
 
 ## W1 — W2 head camera
 
-Prompt: `fiveages@W2-0035`. Leave running.
+Prompt: `fiveages@W2-0035`. **Separate SSH from Z1.** Leave running.
+
+Z1’s router must already be up. Camera launch should print `Detected running rmw_zenohd` and **not** start a second router.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -89,7 +172,7 @@ Expect Gemini 336L connected. Ignore `compressed_pub` / `theora` errors.
 
 ## W2 — W2 check + DualVLN bridge
 
-Prompt: `fiveages@W2-0035`. **Second** SSH. Same `source` / `export` as W1, plus:
+Prompt: `fiveages@W2-0035`. **Another** SSH. Same `source` / `export` as W1, plus:
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"
@@ -186,3 +269,4 @@ python3 ~/save_head_rgb.py --out /tmp/w2_head_rgb.png
 3. Camera launch on W1
 4. DualVLN on S1
 5. Chassis launch on C1 (`Ctrl+C`)
+6. Zenoh router on Z1 (`Ctrl+C`)
