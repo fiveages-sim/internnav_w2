@@ -1,0 +1,47 @@
+# W2 implementation notes
+
+Details that do not belong in the command-only [`Quick_Start.md`](../Quick_Start.md).
+
+## Chassis (孟子云)
+
+Linkhou `s2_chassis_ws` is owned by the chassis bring-up owner. **Do not edit it** unless they ask.
+
+After their 2026-09 graph change, W2 must run the Zenoh **router first**, and the 3588 must join as a **client** of `192.168.111.223:7447`. Launch with `publish_robot_state:=false`. Full command order: [`../Quick_Start.md`](../Quick_Start.md) **Z1 then C1**.
+
+1. On W2-0035: `ros2 run rmw_zenoh_cpp rmw_zenohd` (one process only).
+2. `ssh linux@192.168.111.61` (password `linux`) → `distrobox enter ubuntu24`.
+3. Stop any previous chassis launch.
+4. `echo "$ZENOH_CONFIG_OVERRIDE"` must be  
+   `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`.  
+   If not: `source ~/s2_chassis_ws/.bashrc` **or** `export CHASSIS_ZENOH_REMOTE=1` then `source ~/s2_chassis_ws/config/chassis_env.conf`.
+5. `source ~/s2_chassis_ws/install/setup.bash`
+6. `ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0 publish_robot_state:=false`
+
+On W2 you should then see `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`, plus `/chassis/imu`, `/chassis/status`, `/cmd_vel_joy`, `/relative_goal_cmd`, and the other `/chassis/*` names in Quick Start.
+
+Do **not** `unset ZENOH_CONFIG_OVERRIDE` on the 3588 (that would drop the client endpoint). **Do** `unset` it on W2 so the IPC stays the router, not a leftover client of `192.168.111.115`.
+
+Two `rmw_zenohd` instances on 7447 will fail or split the graph. Camera launch should log `Detected running rmw_zenohd` and continue.
+
+## Camera
+
+Launch: `gemini_330_series_head.launch.py` with `serial_number:=CPC6463000WX`.  
+Not `gemini_336.launch.py`. Not RealSense. Raw RGB is enough if compressed plugins fail.
+
+`rqt_image_view` needs a real display (NoMachine on W2, or `ssh -Y` from Sim-06). Cursor SSH will print `could not connect to display`. Use `scripts/save_head_rgb.py` as a fallback.
+
+## Bridge
+
+- `--rgb-topic /camera_head/color/image_raw`
+- `--no-use-sim-time` on hardware
+- `--dry-run` until you confirm `/chassis/odom`
+- `--no-tuck`; never `--tuck-body` (waist home can tip the base)
+- Slow live defaults used in lab: `--lin-x 0.08 --yaw-rate 0.12 --forward-m 0.10 --turn-deg 6 --step-pause 1.0`
+- Log line `Waiting for /head_camera/rgb` is leftover Isaac text
+- Exit `Aborted` / `rcl_shutdown already called` is rclpy teardown
+
+`--step-pause` and slower `--lin-x` do **not** make DualVLN “think longer”; they only space or slow execution.
+
+## Safety
+
+E-stop before live `/cmd_vel`. Chassis `cmd_timeout_s` is about **0.5 s**; the bridge pulses Twist during each action. Language-goal quality requires a **moving** camera (live), not a 10-step dry-run.

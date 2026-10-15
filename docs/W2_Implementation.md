@@ -1,47 +1,47 @@
-# W2 implementation notes
+# W2 实现说明
 
-Details that do not belong in the command-only [`Quick_Start.md`](../Quick_Start.md).
+不宜放进仅命令的 [`Quick_Start.md`](../Quick_Start.md) 的细节。
 
-## Chassis (孟子云)
+## 底盘（孟子云）
 
-Linkhou `s2_chassis_ws` is owned by the chassis bring-up owner. **Do not edit it** unless they ask.
+Linkhou `s2_chassis_ws` 由底盘联调负责人维护。**除非对方要求，否则不要修改。**
 
-After their 2026-09 graph change, W2 must run the Zenoh **router first**, and the 3588 must join as a **client** of `192.168.111.223:7447`. Launch with `publish_robot_state:=false`. Full command order: [`../Quick_Start.md`](../Quick_Start.md) **Z1 then C1**.
+其 2026-09 图变更之后，W2 必须**先**跑 Zenoh **router**，3588 须作为 `192.168.111.223:7447` 的 **client** 加入。Launch 使用 `publish_robot_state:=false`。完整命令顺序：[`../Quick_Start.md`](../Quick_Start.md) **先 Z1 再 C1**。
 
-1. On W2-0035: `ros2 run rmw_zenoh_cpp rmw_zenohd` (one process only).
-2. `ssh linux@192.168.111.61` (password `linux`) → `distrobox enter ubuntu24`.
-3. Stop any previous chassis launch.
-4. `echo "$ZENOH_CONFIG_OVERRIDE"` must be  
-   `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`.  
-   If not: `source ~/s2_chassis_ws/.bashrc` **or** `export CHASSIS_ZENOH_REMOTE=1` then `source ~/s2_chassis_ws/config/chassis_env.conf`.
+1. 在 W2-0035：`ros2 run rmw_zenoh_cpp rmw_zenohd`（仅一个进程）。
+2. `ssh linux@192.168.111.61`（密码 `linux`）→ `distrobox enter ubuntu24`。
+3. 停掉此前的底盘 launch。
+4. `echo "$ZENOH_CONFIG_OVERRIDE"` 必须为  
+   `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`。  
+   若不是：`source ~/s2_chassis_ws/.bashrc` **或** `export CHASSIS_ZENOH_REMOTE=1` 再 `source ~/s2_chassis_ws/config/chassis_env.conf`。
 5. `source ~/s2_chassis_ws/install/setup.bash`
 6. `ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0 publish_robot_state:=false`
 
-On W2 you should then see `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`, plus `/chassis/imu`, `/chassis/status`, `/cmd_vel_joy`, `/relative_goal_cmd`, and the other `/chassis/*` names in Quick Start.
+此后在 W2 上应能看到 `/cmd_vel`、`/chassis/odom`、`/chassis/joint_states`，以及 `/chassis/imu`、`/chassis/status`、`/cmd_vel_joy`、`/relative_goal_cmd` 和 Quick Start 中的其他 `/chassis/*` 名称。
 
-Do **not** `unset ZENOH_CONFIG_OVERRIDE` on the 3588 (that would drop the client endpoint). **Do** `unset` it on W2 so the IPC stays the router, not a leftover client of `192.168.111.115`.
+**不要**在 3588 上 `unset ZENOH_CONFIG_OVERRIDE`（会丢掉 client 端点）。在 W2 上**要** `unset`，让工控机保持为 router，而不是残留成 `192.168.111.115` 的 client。
 
-Two `rmw_zenohd` instances on 7447 will fail or split the graph. Camera launch should log `Detected running rmw_zenohd` and continue.
+7447 上两个 `rmw_zenohd` 会失败或分裂图。相机 launch 应打出 `Detected running rmw_zenohd` 并继续。
 
-## Camera
+## 相机
 
-Launch: `gemini_330_series_head.launch.py` with `serial_number:=CPC6463000WX`.  
-Not `gemini_336.launch.py`. Not RealSense. Raw RGB is enough if compressed plugins fail.
+Launch：`gemini_330_series_head.launch.py`，带 `serial_number:=CPC6463000WX`。  
+不是 `gemini_336.launch.py`。不是 RealSense。若压缩插件失败，原始 RGB 即可。
 
-`rqt_image_view` needs a real display (NoMachine on W2, or `ssh -Y` from Sim-06). Cursor SSH will print `could not connect to display`. Use `scripts/save_head_rgb.py` as a fallback.
+`rqt_image_view` 需要真实显示器（W2 上 NoMachine，或从 Sim-06 `ssh -Y`）。Cursor SSH 会打印 `could not connect to display`。备用：`scripts/save_head_rgb.py`。
 
 ## Bridge
 
 - `--rgb-topic /camera_head/color/image_raw`
-- `--no-use-sim-time` on hardware
-- `--dry-run` until you confirm `/chassis/odom`
-- `--no-tuck`; never `--tuck-body` (waist home can tip the base)
-- Slow live defaults used in lab: `--lin-x 0.08 --yaw-rate 0.12 --forward-m 0.10 --turn-deg 6 --step-pause 1.0`
-- Log line `Waiting for /head_camera/rgb` is leftover Isaac text
-- Exit `Aborted` / `rcl_shutdown already called` is rclpy teardown
+- 真机上用 `--no-use-sim-time`
+- 确认 `/chassis/odom` 之前用 `--dry-run`
+- `--no-tuck`；切勿 `--tuck-body`（腰部回零可能让底盘倾倒）
+- 实验室 slow live 默认：`--lin-x 0.08 --yaw-rate 0.12 --forward-m 0.10 --turn-deg 6 --step-pause 1.0`
+- 日志行 `Waiting for /head_camera/rgb` 是遗留的 Isaac 文案
+- 退出时的 `Aborted` / `rcl_shutdown already called` 属于 rclpy 拆除
 
-`--step-pause` and slower `--lin-x` do **not** make DualVLN “think longer”; they only space or slow execution.
+`--step-pause` 与更慢的 `--lin-x` **不会**让 DualVLN「想更久」；只拉长间隔或放慢执行。
 
-## Safety
+## 安全
 
-E-stop before live `/cmd_vel`. Chassis `cmd_timeout_s` is about **0.5 s**; the bridge pulses Twist during each action. Language-goal quality requires a **moving** camera (live), not a 10-step dry-run.
+Live `/cmd_vel` 前先急停。底盘 `cmd_timeout_s` 约 **0.5 s**；bridge 在每个动作期间脉冲 Twist。语言目标质量需要**运动中的**相机（live），不是 10 步 dry-run。

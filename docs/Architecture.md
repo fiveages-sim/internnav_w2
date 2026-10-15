@@ -1,6 +1,6 @@
 # Architecture — DualVLN on FiveAges W2
 
-## Pipeline
+## 流水线
 
 ```
  language instruction
@@ -21,32 +21,32 @@
 └─────────────────────┘
 ```
 
-| Path | Transport |
+| 路径 | 传输 |
 |------|-----------|
-| Camera → bridge | ROS 2 on W2 (`/camera_head/color/image_raw`) |
-| Chassis ↔ W2 | ROS 2 Zenoh (`/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`, …) |
-| W2 ↔ DualVLN | HTTP to Sim-06 `:8087` (not Zenoh) |
+| 相机 → bridge | W2 上的 ROS 2（`/camera_head/color/image_raw`） |
+| 底盘 ↔ W2 | ROS 2 Zenoh（`/cmd_vel`、`/chassis/odom`、`/chassis/joint_states`、…） |
+| W2 ↔ DualVLN | HTTP 到 Sim-06 `:8087`（不是 Zenoh） |
 
-Sim-06 does **not** join the robot ROS graph. Do not load DualVLN on the 4060.
+Sim-06 **不**加入机器人 ROS 图。不要在 4060 上加载 DualVLN。
 
-## Discrete actions
+## 离散动作
 
-| Code | Name | Bridge |
+| 码 | 名称 | Bridge |
 |------|------|--------|
-| 0 | STOP | zero Twist |
+| 0 | STOP | 零 Twist |
 | 1 | FORWARD | `linear.x` |
 | 2 | TURN_LEFT | `+angular.z` |
 | 3 | TURN_RIGHT | `-angular.z` |
-| -1 / 5 | LOOK_DOWN / WAIT | stop only (head is **not** moved) |
+| -1 / 5 | LOOK_DOWN / WAIT | 仅停车（**不**动头部） |
 
-Dry-run with a parked robot does **not** prove object search: the image never changes. Judge navigation on a live closed loop.
+机器人停着做 dry-run **不能**证明目标搜索：图像不会变。请在 live 闭环上判断导航。
 
 ## Zenoh
 
-**Router:** W2-0035, `ros2 run rmw_zenoh_cpp rmw_zenohd`, typically `tcp/192.168.111.223:7447`. Start this **before** the chassis launch. The camera launch should attach to the existing router (`Detected running rmw_zenohd`).
+**Router：** W2-0035，`ros2 run rmw_zenoh_cpp rmw_zenohd`，通常为 `tcp/192.168.111.223:7447`。在底盘 launch **之前**启动。相机 launch 应挂到已有 router（`Detected running rmw_zenohd`）。
 
-**Client:** 3588 Distrobox. `ZENOH_CONFIG_OVERRIDE` must be `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]` (`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` env files). Launch with `publish_robot_state:=false`.
+**Client：** 3588 Distrobox。`ZENOH_CONFIG_OVERRIDE` 必须为 `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`（`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` 环境文件）。Launch 使用 `publish_robot_state:=false`。
 
-Two `rmw_zenohd` instances on 7447 will fail or split the graph. Do not `unset ZENOH_CONFIG_OVERRIDE` on the chassis.
+7447 上两个 `rmw_zenohd` 会失败或分裂图。不要在底盘上 `unset ZENOH_CONFIG_OVERRIDE`。
 
-H1 Docker eval uses a **different** InternNav config and port **8023**. Lift2S / W2 DualVLN stay on **8087**.
+H1 Docker eval 使用**另一套** InternNav 配置与端口 **8023**。Lift2S / W2 DualVLN 仍用 **8087**。

@@ -1,47 +1,47 @@
 # Quick Start — InternNav DualVLN on W2
 
-**Runtime commands only.** No clone, conda, or weight download. For first-time setup see [`docs/Installation_Guide.md`](docs/Installation_Guide.md).
+**仅运行时命令。** 不含克隆、conda 或权重下载。首次搭建见 [`docs/Installation_Guide.md`](docs/Installation_Guide.md)。
 
-| ID | Machine | Prompt | Role |
+| ID | 机器 | 提示符 | 角色 |
 |----|---------|--------|------|
-| **Z1** | W2-0035 | `fiveages@W2-0035` | Zenoh **router** (`rmw_zenohd`) |
-| **C1** | Chassis | `linux@linux` then Distrobox | Linkhou launch (Zenoh **client**) |
+| **Z1** | W2-0035 | `fiveages@W2-0035` | Zenoh **router**（`rmw_zenohd`） |
+| **C1** | 底盘 | `linux@linux` 再进 Distrobox | Linkhou 启动（Zenoh **client**） |
 | **S1** | Sim-06 | `fiveages@Sim-06` | DualVLN `:8087` |
-| **W1** | W2-0035 | `fiveages@W2-0035` | Head camera |
+| **W1** | W2-0035 | `fiveages@W2-0035` | 头部相机 |
 | **W2** | W2-0035 | `fiveages@W2-0035` | Bridge / `hz` / `curl` |
-| **W3** | W2 desktop (NoMachine) | `fiveages@W2-0035` | `rqt_image_view` |
+| **W3** | W2 桌面（NoMachine） | `fiveages@W2-0035` | `rqt_image_view` |
 
-Dry-run and live **must** run on **W2-0035**, not Sim-06. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis launch. Do not start a second router (camera launch will reuse the running one).
+Dry-run 与 live **必须**在 **W2-0035** 上运行，不要在 Sim-06。Live 前先急停。`--no-tuck`。**只**跑一个 `rmw_zenohd` — 在底盘 launch **之前**于 W2 启动。不要再起第二个 router（相机 launch 会复用已在跑的那个）。
 
-**Suggested order:** Z1 Zenoh router → C1 chassis → S1 server → W1 camera → W2 check topics → dry-run → live.
+**建议顺序：** Z1 Zenoh router → C1 底盘 → S1 服务端 → W1 相机 → W2 检查话题 → dry-run → live。
 
 ---
 
 ## SSH
 
-**W2-0035** (from Sim-06 or any lab PC):
+**W2-0035**（从 Sim-06 或任意实验室 PC）：
 
 ```bash
 ssh fiveages@192.168.111.223
 ```
 
-Username `fiveages`, password `123456`.
+用户名 `fiveages`，密码 `123456`。
 
-Prompt must become `fiveages@W2-0035`. Open **three** SSH sessions (Zenoh + camera + bridge).
+提示符应变为 `fiveages@W2-0035`。打开 **三个** SSH 会话（Zenoh + 相机 + bridge）。
 
-**Chassis:**
+**底盘：**
 
 ```bash
 ssh linux@192.168.111.61
 ```
 
-Username `linux`, password `linux`. Prompt `linux@linux`.
+用户名 `linux`，密码 `linux`。提示符 `linux@linux`。
 
 ---
 
-## Z1 — Zenoh router (W2-0035)
+## Z1 — Zenoh router（W2-0035）
 
-Prompt: `fiveages@W2-0035`. Leave running. The 3588 connects **to this host** (`192.168.111.223:7447`).
+提示符：`fiveages@W2-0035`。保持运行。3588 **连到本机**（`192.168.111.223:7447`）。
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -53,46 +53,46 @@ export ROS_DOMAIN_ID=0
 ros2 run rmw_zenoh_cpp rmw_zenohd
 ```
 
-Expect a line that Zenoh can be reached at `tcp/192.168.111.223:7447`. Do **not** start another `rmw_zenohd` in W1 or W2.
+期望出现 Zenoh 可在 `tcp/192.168.111.223:7447` 访问的日志行。**不要**在 W1 或 W2 再起另一个 `rmw_zenohd`。
 
 ---
 
-## C1 — Chassis (3588 Distrobox)
+## C1 — 底盘（3588 Distrobox）
 
-On the chassis SSH session. **Wait for Distrobox** after `distrobox enter` before the next lines. Do not `exit` the container.
+在底盘 SSH 会话中。`distrobox enter` 之后**等 Distrobox 就绪**再敲后续命令。不要 `exit` 容器。
 
 ```bash
 distrobox enter ubuntu24
 ```
 
-Stop any old chassis launch (`Ctrl+C` in that Distrobox) so only one `chassis_ros2_control` is running.
+停掉旧的底盘 launch（在该 Distrobox 里 `Ctrl+C`），保证只跑一个 `chassis_ros2_control`。
 
-Confirm the 3588 is a Zenoh **client** of W2:
+确认 3588 是 W2 的 Zenoh **client**：
 
 ```bash
 echo "$ZENOH_CONFIG_OVERRIDE"
 ```
 
-It should look like:
+应类似：
 
 ```text
 mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]
 ```
 
-If it is empty, still has `mode="peer"`, or points at another PC (e.g. `192.168.111.115`):
+若为空、仍是 `mode="peer"`、或指向别的机器（如 `192.168.111.115`）：
 
 ```bash
 source ~/s2_chassis_ws/.bashrc
 ```
 
-or:
+或：
 
 ```bash
 export CHASSIS_ZENOH_REMOTE=1
 source ~/s2_chassis_ws/config/chassis_env.conf
 ```
 
-Then:
+然后：
 
 ```bash
 # echo "$ZENOH_CONFIG_OVERRIDE"
@@ -104,11 +104,11 @@ ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
   can_iface:=bcan0 publish_robot_state:=false
 ```
 
-You should receive `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`
+应收到 `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`
 
-Leave this running. Do not edit `s2_chassis_ws` except as the chassis owner documents.
+保持运行。除底盘负责人文档所述外，不要改 `s2_chassis_ws`。
 
-On W2 (after Z1 + C1), `ros2 topic list` should include at least `/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`. A healthy chassis-only graph looks like:
+在 W2 上（Z1 + C1 之后），`ros2 topic list` 至少应包含 `/cmd_vel`、`/chassis/odom`、`/chassis/joint_states`。健康的仅底盘图大致如下：
 
 ```text
 /chassis/auto_mode_enabled
@@ -132,13 +132,13 @@ On W2 (after Z1 + C1), `ros2 topic list` should include at least `/cmd_vel`, `/c
 /tf
 ```
 
-(`publish_robot_state:=false` avoids a second robot_state_publisher fighting the upper-body stack.)
+（`publish_robot_state:=false` 可避免第二个 robot_state_publisher 与上半身栈冲突。）
 
 ---
 
-## S1 — Sim-06 DualVLN server
+## S1 — Sim-06 DualVLN 服务端
 
-Prompt: `fiveages@Sim-06` (do **not** SSH).
+提示符：`fiveages@Sim-06`（**不要**再 SSH）。
 
 ```bash
 conda activate internnav
@@ -146,15 +146,15 @@ cd ~/InternNav
 python scripts/eval/start_server.py --host 0.0.0.0 --port 8087
 ```
 
-Leave running. Expect `Uvicorn running on http://0.0.0.0:8087`.
+保持运行。期望 `Uvicorn running on http://0.0.0.0:8087`。
 
 ---
 
-## W1 — W2 head camera
+## W1 — W2 头部相机
 
-Prompt: `fiveages@W2-0035`. **Separate SSH from Z1.** Leave running.
+提示符：`fiveages@W2-0035`。**与 Z1 分开的 SSH。** 保持运行。
 
-Z1’s router must already be up. Camera launch should print `Detected running rmw_zenohd` and **not** start a second router.
+Z1 的 router 必须已起来。相机 launch 应打印 `Detected running rmw_zenohd`，并**不要**再起第二个 router。
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -166,13 +166,13 @@ export ROS_DOMAIN_ID=0
 ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC6463000WX
 ```
 
-Expect Gemini 336L connected. Ignore `compressed_pub` / `theora` errors.
+期望 Gemini 336L 已连接。可忽略 `compressed_pub` / `theora` 报错。
 
 ---
 
-## W2 — W2 check + DualVLN bridge
+## W2 — W2 检查 + DualVLN bridge
 
-Prompt: `fiveages@W2-0035`. **Another** SSH. Same `source` / `export` as W1, plus:
+提示符：`fiveages@W2-0035`。**再开一个** SSH。与 W1 相同的 `source` / `export`，再加上：
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"
@@ -187,13 +187,13 @@ curl -sS --connect-timeout 5 http://192.168.110.35:8087/docs | head
 ls ~/internnav_w2_bridge.py
 ```
 
-If the bridge is missing, from **Sim-06**:
+若缺少 bridge，从 **Sim-06**：
 
 ```bash
 scp ~/InternNav-W2/scripts/internnav_w2_bridge.py fiveages@192.168.111.223:~/internnav_w2_bridge.py
 ```
 
-**Dry-run** (no wheels) — still on W2-0035:
+**Dry-run**（不转轮）— 仍在 W2-0035：
 
 ```bash
 python3 ~/internnav_w2_bridge.py \
@@ -208,7 +208,7 @@ python3 ~/internnav_w2_bridge.py \
   --max-steps 10
 ```
 
-**Live** (e-stop; `/chassis/odom` must be live):
+**Live**（急停就绪；`/chassis/odom` 必须在更新）：
 
 ```bash
 python3 ~/internnav_w2_bridge.py \
@@ -233,11 +233,11 @@ ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{}"
 
 ---
 
-## W3 — rqt (head RGB)
+## W3 — rqt（头部 RGB）
 
-Head camera is **Orbbec**, not RealSense. Topic: `/camera_head/color/image_raw`.
+头部相机是 **Orbbec**，不是 RealSense。话题：`/camera_head/color/image_raw`。
 
-Do **not** run this in a Cursor SSH tab (`could not connect to display`). Use **NoMachine** on W2-0035, terminal **on the remote desktop**:
+**不要**在 Cursor SSH 标签页里跑（`could not connect to display`）。在 W2-0035 上用 **NoMachine**，在**远程桌面**的终端里：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -248,25 +248,25 @@ export ROS_DOMAIN_ID=0
 ros2 run rqt_image_view rqt_image_view
 ```
 
-Dropdown: `/camera_head/color/image_raw`.
+下拉选择：`/camera_head/color/image_raw`。
 
-Or from Sim-06’s own desktop: `ssh -Y fiveages@192.168.111.223` then the same. `$DISPLAY` must be set.
+或从 Sim-06 本机桌面：`ssh -Y fiveages@192.168.111.223` 再执行同样命令。必须已设置 `$DISPLAY`。
 
-Save one frame without GUI (W2 SSH OK):
+无 GUI 保存一帧（W2 SSH 即可）：
 
 ```bash
 python3 ~/save_head_rgb.py --out /tmp/w2_head_rgb.png
 ```
 
-(`scp` `scripts/save_head_rgb.py` to W2 first if needed.)
+（如需，先把 `scripts/save_head_rgb.py` `scp` 到 W2。）
 
 ---
 
-## Stop
+## 停止
 
-1. Bridge on W2 (`Ctrl+C`)
+1. W2 上的 bridge（`Ctrl+C`）
 2. rqt
-3. Camera launch on W1
-4. DualVLN on S1
-5. Chassis launch on C1 (`Ctrl+C`)
-6. Zenoh router on Z1 (`Ctrl+C`)
+3. W1 上的相机 launch
+4. S1 上的 DualVLN
+5. C1 上的底盘 launch（`Ctrl+C`）
+6. Z1 上的 Zenoh router（`Ctrl+C`）
