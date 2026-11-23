@@ -41,6 +41,8 @@ zy does **not** join the robot ROS graph. Do not load DualVLN on the 4060.
 
 Dry-run with a parked robot does **not** prove object search: the image never changes. Judge navigation on a live closed loop.
 
+Live wheels + HTTP OK still does **not** guarantee reaching a named object. DualVLN / SocialGen emit discrete explore actions; success depends on model strength, instruction wording, whether the target is visible, FOV, and enough steps (early `Ctrl+C` aborts the search).
+
 ## Zenoh
 
 **Router:** W2-019, `ros2 run rmw_zenoh_cpp rmw_zenohd`, typically `tcp/192.168.110.69:7447`. Start this **before** the chassis launch. The camera launch should attach to the existing router (`Detected running rmw_zenohd`).

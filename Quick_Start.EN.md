@@ -11,9 +11,11 @@
 | **W2** | W2-019 | `fiveages@W2-019` | Bridge / `hz` / `curl` |
 | **W3** | W2 desktop (NoMachine) | `fiveages@W2-019` | `rqt_image_view` |
 
-Dry-run and live **must** run on **W2-019**, not zy. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis launch. Do not start a second router (camera launch will reuse the running one).
+Dry-run and live **must** run on **W2-019**, not zy. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis joins. Do not start a second router (camera launch will reuse the running one).
 
-**Suggested order:** Z1 Zenoh router → C1 chassis → S1 server → W1 camera → W2 check topics → dry-run → live.
+**Domain IDs (W2-019 + web chassis stack):** The chassis web UI (`http://6.6.6.6:8080` / `http://192.168.110.63:8080`) keeps an **internal** platform domain (usually `0`) and an **external** multi-machine domain (**`77`** by default). `/chassis/v1/*` and the upper-body `/cmd_vel` bridge appear on the **external** domain. Head camera nodes default to domain **`0`**. Different `ROS_DOMAIN_ID` ⇒ different `ros2 topic list` — that is expected. For InternNav, **camera + bridge + chassis external API must share one domain** (recommended: set `ROS_DOMAIN_ID=77` for Zenoh router clients on W2: camera, rqt, bridge). Chassis parameter page must keep **上肢 Zenoh Router IP** = `6.6.6.100`, port `7447`. Select **自动模式** before live motion.
+
+**Suggested order:** Z1 Zenoh router → web chassis 自动模式 → S1 server → W1 camera **with domain 77** → W2 check topics on domain 77 → dry-run → `/cmd_vel` smoke → live.
 
 ---
 
@@ -134,6 +136,28 @@ On W2 (after Z1 + C1), `ros2 topic list` should include at least `/cmd_vel`, `/c
 
 (`publish_robot_state:=false` avoids a second robot_state_publisher fighting the upper-body stack.)
 
+**Web chassis UI** (`http://6.6.6.6:8080/` or `http://192.168.110.63:8080/`): set **自动模式** before live `/cmd_vel`.
+
+**Domain IDs (W2-019 AMR stack).** The chassis web **参数配置** has two domains:
+
+| Setting | Typical value | Meaning |
+|---------|---------------|---------|
+| 平台系统参数 → ROS 工作域 | `0` | Internal AMR / lidar stack |
+| 联机与扩展 → 外域 ROS_DOMAIN_ID | must match W2 | Chassis exposes `/chassis/v1` + accepts `/cmd_vel` / TF here |
+| 上肢 Zenoh Router IP | `6.6.6.100` | Chassis Zenoh **client** → W2 `rmw_zenohd` |
+| 上肢 Zenoh 端口 | `7447` | |
+
+If 外域 is `77` but camera/bridge use `ROS_DOMAIN_ID=0`, you get **two topic lists on the same Zenoh router**. Fix by making them equal: run camera + bridge + rqt with `export ROS_DOMAIN_ID=77` (matches current web 外域), **or** ask the chassis owner to set 外域 to `0`.
+
+**Ready check (one W2 Zenoh shell, domain = 外域):**
+
+```bash
+ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis'
+ros2 topic info /cmd_vel -v
+```
+
+You must see **camera + `/cmd_vel`**, and `/cmd_vel` **Subscription count ≥ 1**. See [`docs/W2_Implementation.md`](docs/W2_Implementation.md) “Split graph”.
+
 ---
 
 ## S1 — zy DualVLN server
@@ -161,7 +185,8 @@ source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 unset ZENOH_CONFIG_OVERRIDE
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-export ROS_DOMAIN_ID=0
+# Must match chassis web 外域 ROS_DOMAIN_ID (lab default 77; use 0 only if 外域 was changed to 0)
+export ROS_DOMAIN_ID=77
 
 ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC9363000CZ
 ```
@@ -172,7 +197,7 @@ Expect Gemini 336L connected. Ignore `compressed_pub` / `theora` errors.
 
 ## W2 — W2 check + DualVLN bridge
 
-Prompt: `fiveages@W2-019`. **Another** SSH. Same `source` / `export` as W1, plus:
+Prompt: `fiveages@W2-019`. **Another** SSH. Same `source` / `export` as W1 (including **`ROS_DOMAIN_ID=77`**), plus:
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"
@@ -181,8 +206,8 @@ export no_proxy="$NO_PROXY"
 
 ```bash
 ros2 topic hz /camera_head/color/image_raw
-ros2 topic hz /chassis/odom
-ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis/odom'
+ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis'
+ros2 topic info /cmd_vel -v
 curl -sS --connect-timeout 5 http://192.168.110.35:8087/docs | head
 ls ~/internnav_w2_bridge.py
 ```
@@ -193,58 +218,71 @@ If the bridge is missing, from **zy**:
 scp ~/internnav_w2/scripts/internnav_w2_bridge.py fiveages@192.168.110.69:~/internnav_w2_bridge.py
 ```
 
-**Checkpoints** (on zy under InternNav; pass via `--model-path`):
+### Running base DualVLN vs SocialGen finetune
 
-| Model | `--model-path` |
-|-------|----------------|
-| Base DualVLN | `checkpoints/InternVLA-N1-DualVLN` |
-| SocialGen finetune | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
+| Model | `--model-path` (relative to InternNav cwd on zy) |
+|-------|--------------------------------------------------|
+| **Original** DualVLN | `checkpoints/InternVLA-N1-DualVLN` |
+| **Finetuned** SocialGen | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
 
-Restart `start_server.py` on zy when switching models (one agent ≈ fills a 5090). SocialGen needs `chat_template.json` in its checkpoint dir (copy from base if missing).
+Rules that apply to **both**:
 
-**Dry-run** (no wheels) — still on W2:
+- One agent ≈ fills a 5090. **Restart** `start_server.py` on zy when switching models, or after dry-run before live if `/agent/init` returns **500** (VRAM still held).
+- SocialGen needs `chat_template.json` in its checkpoint dir (copy from base if missing).
+- Bridge shell: `ROS_DOMAIN_ID=77`, Zenoh, `NO_PROXY` for `192.168.110.35`.
+- Wheels moving + `InternNav init OK` means the **stack** is correct. Missing a language goal (e.g. chair) is usually **model / scene / instruction**, not a wiring bug — DualVLN is discrete VLN (look/turn/forward), not a guaranteed object finder; `-1` WAIT does not tilt the head on W2; stop early (`Ctrl+C` at ~20 steps) often ends before a search finishes.
+
+**Dry-run** (no wheels) — pick one `--model-path`:
 
 ```bash
-# Base DualVLN
+# Original DualVLN
 python3 ~/internnav_w2_bridge.py \
-  --host 192.168.110.35 \
-  --port 8087 \
+  --host 192.168.110.35 --port 8087 \
   --model-path checkpoints/InternVLA-N1-DualVLN \
   --rgb-topic /camera_head/color/image_raw \
-  --no-use-sim-time \
-  --width 640 --height 480 \
+  --no-use-sim-time --width 640 --height 480 \
   --instruction "Find the black chair" \
-  --dry-run \
-  --no-tuck \
-  --max-steps 10
+  --dry-run --no-tuck --max-steps 10
 
-# SocialGen finetune — same flags, change --model-path only
-# --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115
-```
-
-Expect `InternNav init OK` then `step N/10 … action=…`. A core dump on exit is often rclpy teardown noise after steps finish.
-
-**Live** — only after Z1 + C1 + healthy `/chassis/odom` (e-stop in hand). Drop `--dry-run`. Prefer SocialGen if that is the model under test:
-
-```bash
+# Finetuned SocialGen (restart server first if you just ran base)
 python3 ~/internnav_w2_bridge.py \
-  --host 192.168.110.35 \
-  --port 8087 \
+  --host 192.168.110.35 --port 8087 \
   --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
   --rgb-topic /camera_head/color/image_raw \
-  --no-use-sim-time \
-  --width 640 --height 480 \
+  --no-use-sim-time --width 640 --height 480 \
   --instruction "Find the black chair" \
-  --no-tuck \
-  --lin-x 0.15 \
-  --yaw-rate 0.25 \
-  --forward-m 0.25 \
-  --turn-deg 12 \
-  --step-pause 0.0 \
-  --max-steps 50
+  --dry-run --no-tuck --max-steps 10
 ```
 
-Clear space, watch wheels on the first FORWARD/TURN. Stop with `Ctrl+C`, then:
+Expect `InternNav init OK` then `step N/10 … action=…`. Exit core dump is often rclpy teardown noise.
+
+**Live** — web **自动模式**, e-stop in hand, `/cmd_vel` smoke already OK. Restart server after dry-run. Drop `--dry-run`:
+
+```bash
+# Original DualVLN
+python3 ~/internnav_w2_bridge.py \
+  --host 192.168.110.35 --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN \
+  --rgb-topic /camera_head/color/image_raw \
+  --no-use-sim-time --width 640 --height 480 \
+  --instruction "Find the black chair" \
+  --no-tuck \
+  --lin-x 0.15 --yaw-rate 0.25 --forward-m 0.25 --turn-deg 12 \
+  --step-pause 0.0 --max-steps 100
+
+# Finetuned SocialGen
+python3 ~/internnav_w2_bridge.py \
+  --host 192.168.110.35 --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
+  --rgb-topic /camera_head/color/image_raw \
+  --no-use-sim-time --width 640 --height 480 \
+  --instruction "Find the black chair" \
+  --no-tuck \
+  --lin-x 0.15 --yaw-rate 0.25 --forward-m 0.25 --turn-deg 12 \
+  --step-pause 0.0 --max-steps 100
+```
+
+Clear space; watch first FORWARD/TURN. Stop with `Ctrl+C`, then:
 
 ```bash
 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{}"
@@ -263,7 +301,7 @@ source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 unset ZENOH_CONFIG_OVERRIDE
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-export ROS_DOMAIN_ID=0
+export ROS_DOMAIN_ID=77
 ros2 run rqt_image_view rqt_image_view
 ```
 

@@ -41,6 +41,8 @@ zy **不**加入机器人 ROS 图。不要在 4060 上加载 DualVLN。
 
 机器人停着做 dry-run **不能**证明目标搜索：图像不会变。请在 live 闭环上判断导航。
 
+Live 时轮子能动 + HTTP 正常，仍**不保证**到达命名目标。DualVLN / SocialGen 输出离散探索动作；成败取决于模型能力、指令措辞、目标是否入画、FOV 与是否跑够步数（过早 `Ctrl+C` 会中断搜索）。
+
 ## Zenoh
 
 **Router：** W2-019，`ros2 run rmw_zenoh_cpp rmw_zenohd`，通常为 `tcp/192.168.110.69:7447`。在底盘 launch **之前**启动。相机 launch 应挂到已有 router（`Detected running rmw_zenohd`）。

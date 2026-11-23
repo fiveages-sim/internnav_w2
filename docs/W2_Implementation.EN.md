@@ -23,6 +23,22 @@ Do **not** `unset ZENOH_CONFIG_OVERRIDE` on the 3588 (that would drop the client
 
 Two `rmw_zenohd` instances on 7447 will fail or split the graph. Camera launch should log `Detected running rmw_zenohd` and continue.
 
+### Split graph (camera moves, wheels do not)
+
+**Symptom.** With `RMW_IMPLEMENTATION=rmw_zenoh_cpp` on W2 you see `/camera_head/...` but **no** `/cmd_vel` / `/chassis/*`. `ros2 topic pub /cmd_vel ...` prints forever, yet the base does not move. `ros2 topic pub --once /cmd_vel ...` hangs on `Waiting for at least 1 matching subscription(s)...`.
+
+**Cause (W2-019 AMR).** Camera usually runs with `ROS_DOMAIN_ID=0`. The chassis web **参数配置 → 外域 ROS_DOMAIN_ID** is often `77`: on that domain the chassis (Zenoh client of `6.6.6.100:7447`) exposes `/chassis/v1/*` and `/cmd_vel`. Same Zenoh router, **different domain IDs** → two topic lists. Selecting **自动模式** enables control but does not change domains.
+
+**Fix (required for InternNav live).** Put the chassis ROS nodes on the **same** Zenoh router as W2 (`tcp/192.168.110.69:7447` or wired `tcp/6.6.6.100:7447`), then re-check:
+
+```bash
+# On W2 (Zenoh env, router already running)
+ros2 topic list | grep -E 'cmd_vel|chassis|camera_head'
+ros2 topic info /cmd_vel -v    # must show Subscription count ≥ 1
+```
+
+Until `Subscription count ≥ 1` and a short `/cmd_vel` pub moves the base, do **not** run the bridge without `--dry-run`. Ask the chassis owner how the `:8080` stack joins W2’s Zenoh (client endpoint / Distrobox `s2_chassis_ws`). Do not point the camera off Zenoh just to chase chassis topics.
+
 ## Camera
 
 Launch: `gemini_330_series_head.launch.py` with `serial_number:=CPC9363000CZ`.  
@@ -45,3 +61,5 @@ Not `gemini_336.launch.py`. Not RealSense. Raw RGB is enough if compressed plugi
 ## Safety
 
 E-stop before live `/cmd_vel`. Chassis `cmd_timeout_s` is about **0.5 s**; the bridge pulses Twist during each action. Language-goal quality requires a **moving** camera (live), not a 10-step dry-run.
+
+Validated W2-019 path: domain **77** + web **自动模式** + Zenoh `6.6.6.100:7447`. Compare base vs SocialGen only by changing `--model-path` and restarting the zy server between inits.

@@ -11,9 +11,11 @@
 | **W2** | W2-019 | `fiveages@W2-019` | Bridge / `hz` / `curl` |
 | **W3** | W2 桌面（NoMachine） | `fiveages@W2-019` | `rqt_image_view` |
 
-Dry-run 与 live **必须**在 **W2-019** 上运行，不要在 zy。Live 前先急停。`--no-tuck`。**只**跑一个 `rmw_zenohd` — 在底盘 launch **之前**于 W2 启动。不要再起第二个 router（相机 launch 会复用已在跑的那个）。
+Dry-run 与 live **必须**在 **W2-019** 上运行，不要在 zy。Live 前先急停。`--no-tuck`。**只**跑一个 `rmw_zenohd` — 在底盘接入 **之前**于 W2 启动。不要再起第二个 router（相机 launch 会复用已在跑的那个）。
 
-**建议顺序：** Z1 Zenoh router → C1 底盘 → S1 服务端 → W1 相机 → W2 检查话题 → dry-run → live。
+**Domain ID：** 网页底盘外域默认 **`77`**，相机默认 **`0`** → 两套 `ros2 topic list` 属正常。InternNav 须同一域（推荐相机/rqt/bridge 用 `ROS_DOMAIN_ID=77`；或把网页「外域」改成 `0`）。Zenoh：上肢 router `6.6.6.100:7447`。Live 前网页选**自动模式**。
+
+**建议顺序：** Z1 Zenoh → 网页自动模式 → S1 → W1 相机（domain=外域）→ 同域查话题 → dry-run → `/cmd_vel` 冒烟 → live。
 
 ---
 
@@ -134,6 +136,28 @@ ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
 
 （`publish_robot_state:=false` 可避免第二个 robot_state_publisher 与上半身栈冲突。）
 
+**网页底盘**（`http://6.6.6.6:8080/` 或 `http://192.168.110.63:8080/`）：live `/cmd_vel` 前选 **自动模式**。
+
+**Domain ID（W2-019 AMR）。** 网页 **参数配置** 里有两个域：
+
+| 项 | 典型值 | 含义 |
+|----|--------|------|
+| 平台系统参数 → ROS 工作域 | `0` | 底盘内部 AMR / 雷达 |
+| 联机与扩展 → 外域 ROS_DOMAIN_ID | 须与 W2 一致 | 底盘在此外域暴露 `/chassis/v1` 并收 `/cmd_vel` / TF |
+| 上肢 Zenoh Router IP | `6.6.6.100` | 底盘 Zenoh **client** → W2 `rmw_zenohd` |
+| 上肢 Zenoh 端口 | `7447` | |
+
+若外域是 `77` 而相机/bridge 用 `ROS_DOMAIN_ID=0`，同一 Zenoh router 上会出现**两套话题列表**。统一即可：相机 + bridge + rqt 使用 `export ROS_DOMAIN_ID=77`（与当前网页外域一致），**或**请底盘负责人把外域改成 `0`。
+
+**就绪检查（一个 W2 Zenoh shell，domain = 外域）：**
+
+```bash
+ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis'
+ros2 topic info /cmd_vel -v
+```
+
+必须同时看到**相机 + `/cmd_vel`**，且 `/cmd_vel` 的 **Subscription count ≥ 1**。见 [`docs/W2_Implementation.md`](docs/W2_Implementation.md)「图分裂」。
+
 ---
 
 ## S1 — zy DualVLN 服务端
@@ -161,7 +185,8 @@ source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 unset ZENOH_CONFIG_OVERRIDE
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-export ROS_DOMAIN_ID=0
+# 须与网页「外域 ROS_DOMAIN_ID」一致（实验室默认 77）
+export ROS_DOMAIN_ID=77
 
 ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC9363000CZ
 ```
@@ -172,7 +197,7 @@ ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC936
 
 ## W2 — W2 检查 + DualVLN bridge
 
-提示符：`fiveages@W2-019`。**再开一个** SSH。与 W1 相同的 `source` / `export`，再加上：
+提示符：`fiveages@W2-019`。**再开一个** SSH。与 W1 相同的 `source` / `export`（含 **`ROS_DOMAIN_ID=77`**），再加上：
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"
@@ -181,8 +206,8 @@ export no_proxy="$NO_PROXY"
 
 ```bash
 ros2 topic hz /camera_head/color/image_raw
-ros2 topic hz /chassis/odom
-ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis/odom'
+ros2 topic list | grep -E 'camera_head/color/image_raw|cmd_vel|chassis'
+ros2 topic info /cmd_vel -v
 curl -sS --connect-timeout 5 http://192.168.110.35:8087/docs | head
 ls ~/internnav_w2_bridge.py
 ```
@@ -193,58 +218,71 @@ ls ~/internnav_w2_bridge.py
 scp ~/internnav_w2/scripts/internnav_w2_bridge.py fiveages@192.168.110.69:~/internnav_w2_bridge.py
 ```
 
-**Checkpoint**（在 zy 的 InternNav 下；用 `--model-path`）：
+### 运行基座 DualVLN 与 SocialGen 微调
 
-| 模型 | `--model-path` |
-|------|----------------|
-| 基座 DualVLN | `checkpoints/InternVLA-N1-DualVLN` |
-| SocialGen 微调 | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
+| 模型 | `--model-path`（相对 zy 上 InternNav 工作目录） |
+|------|------------------------------------------------|
+| **原版** DualVLN | `checkpoints/InternVLA-N1-DualVLN` |
+| **微调** SocialGen | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
 
-切换模型时在 zy 上重启 `start_server.py`（5090 上一次只加载一个 agent）。SocialGen 目录须含 `chat_template.json`（缺失则从基座复制）。
+两者共通：
 
-**Dry-run**（不转轮）— 仍在 W2：
+- 5090 上一次约只能加载一个 agent。切换模型，或 dry-run 后再 live 若 `/agent/init` 返回 **500**，须在 zy 上**重启** `start_server.py`。
+- SocialGen 目录须含 `chat_template.json`（缺失则从基座复制）。
+- Bridge shell：`ROS_DOMAIN_ID=77`、Zenoh、`NO_PROXY` 含 `192.168.110.35`。
+- 轮子能动 + `InternNav init OK` 说明**链路正确**。没找到语言目标（如椅子）多为**模型 / 场景 / 指令**问题，不是接线错误——DualVLN 是离散 VLN（看/转/进），不保证目标搜索；`-1` WAIT 在 W2 上**不会**低头；过早 `Ctrl+C`（约 20 步）常在搜完前结束。
+
+**Dry-run**（不转轮）— 二选一 `--model-path`：
 
 ```bash
-# 基座 DualVLN
+# 原版 DualVLN
 python3 ~/internnav_w2_bridge.py \
-  --host 192.168.110.35 \
-  --port 8087 \
+  --host 192.168.110.35 --port 8087 \
   --model-path checkpoints/InternVLA-N1-DualVLN \
   --rgb-topic /camera_head/color/image_raw \
-  --no-use-sim-time \
-  --width 640 --height 480 \
+  --no-use-sim-time --width 640 --height 480 \
   --instruction "Find the black chair" \
-  --dry-run \
-  --no-tuck \
-  --max-steps 10
+  --dry-run --no-tuck --max-steps 10
 
-# SocialGen 微调 — 仅改 --model-path
-# --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115
-```
-
-期望 `InternNav init OK` 与 `step N/10 … action=…`。结束后的 core dump 多为 rclpy 拆除噪声。
-
-**Live** — 仅在 Z1 + C1 且 `/chassis/odom` 正常后（手持急停）。去掉 `--dry-run`。测微调模型时用 SocialGen：
-
-```bash
+# 微调 SocialGen（若刚跑过基座，先重启服务端）
 python3 ~/internnav_w2_bridge.py \
-  --host 192.168.110.35 \
-  --port 8087 \
+  --host 192.168.110.35 --port 8087 \
   --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
   --rgb-topic /camera_head/color/image_raw \
-  --no-use-sim-time \
-  --width 640 --height 480 \
+  --no-use-sim-time --width 640 --height 480 \
   --instruction "Find the black chair" \
-  --no-tuck \
-  --lin-x 0.15 \
-  --yaw-rate 0.25 \
-  --forward-m 0.25 \
-  --turn-deg 12 \
-  --step-pause 0.0 \
-  --max-steps 50
+  --dry-run --no-tuck --max-steps 10
 ```
 
-腾出空间，观察首次 FORWARD/TURN。`Ctrl+C` 停止后：
+期望 `InternNav init OK` 与 `step N/10 … action=…`。退出时的 core dump 多为 rclpy 拆除噪声。
+
+**Live** — 网页**自动模式**、急停就绪、`/cmd_vel` 冒烟已通过。dry-run 后先重启服务端。去掉 `--dry-run`：
+
+```bash
+# 原版 DualVLN
+python3 ~/internnav_w2_bridge.py \
+  --host 192.168.110.35 --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN \
+  --rgb-topic /camera_head/color/image_raw \
+  --no-use-sim-time --width 640 --height 480 \
+  --instruction "Find the black chair" \
+  --no-tuck \
+  --lin-x 0.15 --yaw-rate 0.25 --forward-m 0.25 --turn-deg 12 \
+  --step-pause 0.0 --max-steps 100
+
+# 微调 SocialGen
+python3 ~/internnav_w2_bridge.py \
+  --host 192.168.110.35 --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
+  --rgb-topic /camera_head/color/image_raw \
+  --no-use-sim-time --width 640 --height 480 \
+  --instruction "Find the black chair" \
+  --no-tuck \
+  --lin-x 0.15 --yaw-rate 0.25 --forward-m 0.25 --turn-deg 12 \
+  --step-pause 0.0 --max-steps 100
+```
+
+腾出空间，观察首次 FORWARD/TURN。`Ctrl+C` 后：
 
 ```bash
 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{}"
@@ -263,7 +301,7 @@ source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 unset ZENOH_CONFIG_OVERRIDE
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-export ROS_DOMAIN_ID=0
+export ROS_DOMAIN_ID=77
 ros2 run rqt_image_view rqt_image_view
 ```
 

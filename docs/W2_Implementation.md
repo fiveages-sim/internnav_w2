@@ -23,6 +23,22 @@ Linkhou `s2_chassis_ws` 由底盘联调负责人维护。**除非对方要求，
 
 7447 上两个 `rmw_zenohd` 会失败或分裂图。相机 launch 应打出 `Detected running rmw_zenohd` 并继续。
 
+### 图分裂（相机正常，轮子不动）
+
+**现象。** W2 上 `RMW_IMPLEMENTATION=rmw_zenoh_cpp` 时能看到 `/camera_head/...`，但**没有** `/cmd_vel` / `/chassis/*`。`ros2 topic pub /cmd_vel ...` 一直在刷，车却不动；`--once` 卡在 `Waiting for at least 1 matching subscription(s)...`。
+
+**原因（W2-019 AMR）。** 相机通常用 `ROS_DOMAIN_ID=0`。网页 **参数配置 → 外域 ROS_DOMAIN_ID** 常为 `77`：底盘以 Zenoh client 连 `6.6.6.100:7447`，在该域暴露 `/chassis/v1/*` 与 `/cmd_vel`。同一 Zenoh router、**不同 domain** → 两套话题。选 **自动模式** 只开控制，不改 domain。
+
+
+**修复（InternNav live 必需）。** 让底盘 ROS 节点加入与 W2 相同的 Zenoh router（`tcp/192.168.110.69:7447` 或有线 `tcp/6.6.6.100:7447`），再检查：
+
+```bash
+ros2 topic list | grep -E 'cmd_vel|chassis|camera_head'
+ros2 topic info /cmd_vel -v    # Subscription count 必须 ≥ 1
+```
+
+在订阅者 ≥ 1 且短时 `/cmd_vel` 能让车动之前，bridge **不要**去掉 `--dry-run`。向底盘负责人确认 `:8080` 栈如何以 client 接入 W2 Zenoh（或 Distrobox `s2_chassis_ws`）。不要为了追底盘话题而把相机挪出 Zenoh。
+
 ## 相机
 
 Launch：`gemini_330_series_head.launch.py`，带 `serial_number:=CPC9363000CZ`。  
@@ -45,3 +61,5 @@ Launch：`gemini_330_series_head.launch.py`，带 `serial_number:=CPC9363000CZ`�
 ## 安全
 
 Live `/cmd_vel` 前先急停。底盘 `cmd_timeout_s` 约 **0.5 s**；bridge 在每个动作期间脉冲 Twist。语言目标质量需要**运动中的**相机（live），不是 10 步 dry-run。
+
+已验证 W2-019 路径：外域 **77** + 网页**自动模式** + Zenoh `6.6.6.100:7447`。对比基座与 SocialGen 时只改 `--model-path`，并在两次 init 之间重启 zy 服务端。
