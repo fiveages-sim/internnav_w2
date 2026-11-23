@@ -1,17 +1,17 @@
 # Quick Start — InternNav DualVLN on W2
 
-**Runtime commands only.** No clone, conda, or weight download. For first-time setup see [`docs/Installation_Guide.md`](docs/Installation_Guide.md).
+**Runtime commands only.** No clone, uv venv, or weight download. For first-time setup see [`docs/Installation_Guide.md`](docs/Installation_Guide.md).
 
 | ID | Machine | Prompt | Role |
 |----|---------|--------|------|
-| **Z1** | W2-0035 | `fiveages@W2-0035` | Zenoh **router** (`rmw_zenohd`) |
+| **Z1** | W2-019 | `fiveages@W2-019` | Zenoh **router** (`rmw_zenohd`) |
 | **C1** | Chassis | `linux@linux` then Distrobox | Linkhou launch (Zenoh **client**) |
-| **S1** | Sim-06 | `fiveages@Sim-06` | DualVLN `:8087` |
-| **W1** | W2-0035 | `fiveages@W2-0035` | Head camera |
-| **W2** | W2-0035 | `fiveages@W2-0035` | Bridge / `hz` / `curl` |
-| **W3** | W2 desktop (NoMachine) | `fiveages@W2-0035` | `rqt_image_view` |
+| **S1** | zy (GPU) | on zy host | DualVLN `:8087` |
+| **W1** | W2-019 | `fiveages@W2-019` | Head camera |
+| **W2** | W2-019 | `fiveages@W2-019` | Bridge / `hz` / `curl` |
+| **W3** | W2 desktop (NoMachine) | `fiveages@W2-019` | `rqt_image_view` |
 
-Dry-run and live **must** run on **W2-0035**, not Sim-06. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis launch. Do not start a second router (camera launch will reuse the running one).
+Dry-run and live **must** run on **W2-019**, not zy. E-stop before live. `--no-tuck`. **One** `rmw_zenohd` only — start it on W2 **before** the chassis launch. Do not start a second router (camera launch will reuse the running one).
 
 **Suggested order:** Z1 Zenoh router → C1 chassis → S1 server → W1 camera → W2 check topics → dry-run → live.
 
@@ -19,15 +19,15 @@ Dry-run and live **must** run on **W2-0035**, not Sim-06. E-stop before live. `-
 
 ## SSH
 
-**W2-0035** (from Sim-06 or any lab PC):
+**W2-019** (from zy or any lab PC):
 
 ```bash
-ssh fiveages@192.168.111.223
+ssh fiveages@192.168.110.69
 ```
 
 Username `fiveages`, password `123456`.
 
-Prompt must become `fiveages@W2-0035`. Open **three** SSH sessions (Zenoh + camera + bridge).
+Prompt must become `fiveages@W2-019`. Open **three** SSH sessions (Zenoh + camera + bridge).
 
 **Chassis:**
 
@@ -39,9 +39,9 @@ Username `linux`, password `linux`. Prompt `linux@linux`.
 
 ---
 
-## Z1 — Zenoh router (W2-0035)
+## Z1 — Zenoh router (W2-019)
 
-Prompt: `fiveages@W2-0035`. Leave running. The 3588 connects **to this host** (`192.168.111.223:7447`).
+Prompt: `fiveages@W2-019`. Leave running. The 3588 connects **to this host** (`192.168.110.69:7447` or wired `6.6.6.100:7447`).
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -53,7 +53,7 @@ export ROS_DOMAIN_ID=0
 ros2 run rmw_zenoh_cpp rmw_zenohd
 ```
 
-Expect a line that Zenoh can be reached at `tcp/192.168.111.223:7447`. Do **not** start another `rmw_zenohd` in W1 or W2.
+Expect a line that Zenoh can be reached at `tcp/192.168.110.69:7447` (or this host’s LAN IP). Do **not** start another `rmw_zenohd` in W1 or W2.
 
 ---
 
@@ -76,7 +76,7 @@ echo "$ZENOH_CONFIG_OVERRIDE"
 It should look like:
 
 ```text
-mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]
+mode="client";connect/endpoints=["tcp/192.168.110.69:7447"]
 ```
 
 If it is empty, still has `mode="peer"`, or points at another PC (e.g. `192.168.111.115`):
@@ -104,7 +104,7 @@ ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
   can_iface:=bcan0 publish_robot_state:=false
 ```
 
-You should receive `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`
+You should receive `mode="client";connect/endpoints=["tcp/192.168.110.69:7447"]`
 
 Leave this running. Do not edit `s2_chassis_ws` except as the chassis owner documents.
 
@@ -136,13 +136,13 @@ On W2 (after Z1 + C1), `ros2 topic list` should include at least `/cmd_vel`, `/c
 
 ---
 
-## S1 — Sim-06 DualVLN server
+## S1 — zy DualVLN server
 
-Prompt: `fiveages@Sim-06` (do **not** SSH).
+Prompt: on **zy** (do **not** SSH to W2 for this).
 
 ```bash
-conda activate internnav
-cd ~/InternNav
+source ~/SocialNav/InternNav/.venv/bin/activate
+cd ~/SocialNav/InternNav
 python scripts/eval/start_server.py --host 0.0.0.0 --port 8087
 ```
 
@@ -152,7 +152,7 @@ Leave running. Expect `Uvicorn running on http://0.0.0.0:8087`.
 
 ## W1 — W2 head camera
 
-Prompt: `fiveages@W2-0035`. **Separate SSH from Z1.** Leave running.
+Prompt: `fiveages@W2-019`. **Separate SSH from Z1.** Leave running.
 
 Z1’s router must already be up. Camera launch should print `Detected running rmw_zenohd` and **not** start a second router.
 
@@ -163,7 +163,7 @@ unset ZENOH_CONFIG_OVERRIDE
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
 export ROS_DOMAIN_ID=0
 
-ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC6463000WX
+ros2 launch orbbec_camera gemini_330_series_head.launch.py serial_number:=CPC9363000CZ
 ```
 
 Expect Gemini 336L connected. Ignore `compressed_pub` / `theora` errors.
@@ -172,7 +172,7 @@ Expect Gemini 336L connected. Ignore `compressed_pub` / `theora` errors.
 
 ## W2 — W2 check + DualVLN bridge
 
-Prompt: `fiveages@W2-0035`. **Another** SSH. Same `source` / `export` as W1, plus:
+Prompt: `fiveages@W2-019`. **Another** SSH. Same `source` / `export` as W1, plus:
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"
@@ -187,18 +187,29 @@ curl -sS --connect-timeout 5 http://192.168.110.35:8087/docs | head
 ls ~/internnav_w2_bridge.py
 ```
 
-If the bridge is missing, from **Sim-06**:
+If the bridge is missing, from **zy**:
 
 ```bash
-scp ~/InternNav-W2/scripts/internnav_w2_bridge.py fiveages@192.168.111.223:~/internnav_w2_bridge.py
+scp ~/internnav_w2/scripts/internnav_w2_bridge.py fiveages@192.168.110.69:~/internnav_w2_bridge.py
 ```
 
-**Dry-run** (no wheels) — still on W2-0035:
+**Checkpoints** (on zy under InternNav; pass via `--model-path`):
+
+| Model | `--model-path` |
+|-------|----------------|
+| Base DualVLN | `checkpoints/InternVLA-N1-DualVLN` |
+| SocialGen finetune | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
+
+Restart `start_server.py` on zy when switching models (one agent ≈ fills a 5090). SocialGen needs `chat_template.json` in its checkpoint dir (copy from base if missing).
+
+**Dry-run** (no wheels) — still on W2:
 
 ```bash
+# Base DualVLN
 python3 ~/internnav_w2_bridge.py \
   --host 192.168.110.35 \
   --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN \
   --rgb-topic /camera_head/color/image_raw \
   --no-use-sim-time \
   --width 640 --height 480 \
@@ -206,26 +217,34 @@ python3 ~/internnav_w2_bridge.py \
   --dry-run \
   --no-tuck \
   --max-steps 10
+
+# SocialGen finetune — same flags, change --model-path only
+# --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115
 ```
 
-**Live** (e-stop; `/chassis/odom` must be live):
+Expect `InternNav init OK` then `step N/10 … action=…`. A core dump on exit is often rclpy teardown noise after steps finish.
+
+**Live** — only after Z1 + C1 + healthy `/chassis/odom` (e-stop in hand). Drop `--dry-run`. Prefer SocialGen if that is the model under test:
 
 ```bash
 python3 ~/internnav_w2_bridge.py \
   --host 192.168.110.35 \
   --port 8087 \
+  --model-path checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
   --rgb-topic /camera_head/color/image_raw \
   --no-use-sim-time \
   --width 640 --height 480 \
   --instruction "Find the black chair" \
   --no-tuck \
-  --lin-x 0.08 \
-  --yaw-rate 0.12 \
-  --forward-m 0.10 \
-  --turn-deg 6 \
-  --step-pause 1.0 \
+  --lin-x 0.15 \
+  --yaw-rate 0.25 \
+  --forward-m 0.25 \
+  --turn-deg 12 \
+  --step-pause 0.0 \
   --max-steps 50
 ```
+
+Clear space, watch wheels on the first FORWARD/TURN. Stop with `Ctrl+C`, then:
 
 ```bash
 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{}"
@@ -237,7 +256,7 @@ ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{}"
 
 Head camera is **Orbbec**, not RealSense. Topic: `/camera_head/color/image_raw`.
 
-Do **not** run this in a Cursor SSH tab (`could not connect to display`). Use **NoMachine** on W2-0035, terminal **on the remote desktop**:
+Do **not** run this in a Cursor SSH tab (`could not connect to display`). Use **NoMachine** on W2-019, terminal **on the remote desktop**:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -250,7 +269,7 @@ ros2 run rqt_image_view rqt_image_view
 
 Dropdown: `/camera_head/color/image_raw`.
 
-Or from Sim-06’s own desktop: `ssh -Y fiveages@192.168.111.223` then the same. `$DISPLAY` must be set.
+Or from zy’s own desktop: `ssh -Y fiveages@192.168.110.69` then the same. `$DISPLAY` must be set.
 
 Save one frame without GUI (W2 SSH OK):
 

@@ -1,78 +1,131 @@
 # Installation — InternNav DualVLN for W2
 
-Clone and weights go on **Sim-06 only**. W2-0035 needs ROS 2 Jazzy, `orbbec_camera` (`~/ros2_ws`), and a copy of `internnav_w2_bridge.py`. The 3588 already has `s2_chassis_ws` (do not modify).
+Clone and weights go on the **GPU host (zy)** only (`192.168.110.35`). The W2 IPC needs ROS 2 Jazzy, `orbbec_camera` (`~/ros2_ws`), and a copy of `internnav_w2_bridge.py`. The 3588 already has `s2_chassis_ws` (do not modify).
 
 Upstream: [InternRobotics/InternNav](https://github.com/InternRobotics/InternNav)
 
-## 1. Clone InternNav (Sim-06)
+**Lab policy:** use **[uv](https://docs.astral.sh/uv/)** for DualVLN — **not** conda/Miniconda.
 
-China: GitHub often needs a proxy or `gitclone.com` / `ghproxy` (see lab FlyingBird notes). Example:
+## 1. Clone InternNav (zy)
+
+China: GitHub often needs a proxy or `gitclone.com` / `ghproxy` (see lab FlyingBird notes).
 
 ```bash
+# Preferred lab layout used on zy:
+#   ~/SocialNav/InternNav
+# Or a fresh clone:
 cd ~
-git clone --depth 1 https://github.com/InternRobotics/InternNav.git ~/InternNav
-# if that times out:
-# git clone --depth 1 https://gitclone.com/github.com/InternRobotics/InternNav.git ~/InternNav
+git clone --depth 1 --recursive https://github.com/InternRobotics/InternNav.git ~/InternNav
 ```
 
-Do **not** clone InternNav onto W2-0035 or the 3588 for inference.
+Do **not** clone InternNav onto W2 or the 3588 for inference.
 
-## 2. Conda env and DualVLN weights (Sim-06)
+## 2. uv environment (zy)
 
 ```bash
-conda create -n internnav python=3.10 -y
-conda activate internnav
-cd ~/InternNav
-# Follow InternNav README / this lab’s InternNav_clone_to_5090_commands.md
-# Pin huggingface_hub for transformers 4.51 (do not blindly upgrade to hub 1.x).
+# Install uv once if needed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env" 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+
+cd ~/SocialNav/InternNav   # or ~/InternNav
+uv venv .venv --python 3.10
+source .venv/bin/activate
+
+# RTX 5090 needs a recent cu128 wheel (sm_120). Avoid older cu124-only Torch.
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# InternNav + model deps (flash-attn may need a source build; see notes below)
+uv pip install -e ".[model]" --no-build-isolation
 ```
 
-Weights (China mirror):
+Activate later:
 
 ```bash
-conda activate internnav
+source ~/SocialNav/InternNav/.venv/bin/activate
+```
+
+### flash-attn notes (RTX 5090 / Ubuntu apt CUDA)
+
+If `flash-attn` fails to build:
+
+```bash
+export CUDA_HOME=/usr
+export PATH="/usr/lib/nvidia-cuda-toolkit/bin:$PATH"
+export CC=gcc-12 CXX=g++-12 CUDAHOSTCXX=g++-12
+MAX_JOBS=4 FLASH_ATTENTION_FORCE_BUILD=TRUE \
+  uv pip install flash-attn==2.7.2.post1 --no-build-isolation --no-cache
+```
+
+Building from source can take **30–60+ minutes** (local `nvcc` compile — VPN/mirrors do not speed this up).
+
+Verify:
+
+```bash
+python -c "import torch, flash_attn; print(torch.__version__, torch.cuda.is_available(), flash_attn.__version__)"
+```
+
+## 3. DualVLN checkpoints (zy only)
+
+China Hugging Face mirror:
+
+```bash
+source ~/SocialNav/InternNav/.venv/bin/activate
 export HF_ENDPOINT=https://hf-mirror.com
 export HF_HUB_DISABLE_XET=1
-mkdir -p ~/InternNav/checkpoints
+mkdir -p ~/SocialNav/InternNav/checkpoints
+
+# Base DualVLN
 huggingface-cli download InternRobotics/InternVLA-N1-DualVLN \
-  --local-dir ~/InternNav/checkpoints/InternVLA-N1-DualVLN
+  --local-dir ~/SocialNav/InternNav/checkpoints/InternVLA-N1-DualVLN
+
+# Team SocialGen finetune
+huggingface-cli download Kaizhen111/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115 \
+  --local-dir ~/SocialNav/InternNav/checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115
 ```
 
-Expect shards under `checkpoints/InternVLA-N1-DualVLN/`. VLN-CE / InternData-N1 is **not** required for W2 real-robot inference.
+| Checkpoint | Path (under InternNav cwd) |
+|------------|----------------------------|
+| Base | `checkpoints/InternVLA-N1-DualVLN` |
+| SocialGen finetune | `checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115` |
 
-## 3. This repository
+**Required for SocialGen:** ensure `chat_template.json` exists in the finetune folder (copy from the base DualVLN dir if missing). Without it, `/agent/init` may succeed but every `step` fails with “No chat template is set for this processor.”
 
 ```bash
-# after you clone InternNav-W2 (this repo) onto Sim-06, e.g. ~/InternNav-W2
-scp ~/InternNav-W2/scripts/internnav_w2_bridge.py fiveages@192.168.111.223:~/internnav_w2_bridge.py
-scp ~/InternNav-W2/scripts/save_head_rgb.py fiveages@192.168.111.223:~/save_head_rgb.py
+BASE=~/SocialNav/InternNav/checkpoints/InternVLA-N1-DualVLN
+FT=~/SocialNav/InternNav/checkpoints/InternVLA-N1-DualVLN-SocialGen-10k-3ep-20261115
+cp -n "$BASE/chat_template.json" "$FT/chat_template.json"
 ```
 
-W2 Python is system **3.12** + ROS `rclpy`. Do not `pip install internnav` into that interpreter.
+Do **not** download weights onto W2. Switch models with the bridge `--model-path` (one agent at a time on the 5090 — restart `start_server.py` when switching to free VRAM).
 
-## 4. W2 camera package
+## 4. This repository → W2 scripts
 
-On W2-0035, `~/ros2_ws` must provide `orbbec_camera` and launch file `gemini_330_series_head.launch.py`. Overlay:
+```bash
+# Example: W2-019 Wi-Fi
+scp ~/internnav_w2/scripts/internnav_w2_bridge.py fiveages@192.168.110.69:~/internnav_w2_bridge.py
+scp ~/internnav_w2/scripts/save_head_rgb.py fiveages@192.168.110.69:~/save_head_rgb.py
+```
+
+W2 Python is system **3.12** + ROS `rclpy`. Do not install InternNav into that interpreter.
+
+## 5. W2 camera package
+
+`~/ros2_ws` must provide `orbbec_camera` and `gemini_330_series_head.launch.py`.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 ```
 
-## 5. Chassis
+W2-019 head serial: `CPC9363000CZ` (other W2 units may differ — check the Orbbec label).
 
-On `192.168.111.61`, Distrobox `ubuntu24` and `~/s2_chassis_ws` must already be built by the chassis owner. This repo does not install them.
+If the camera node dies with `diagnostic_updater` undefined-symbol errors, rebuild `orbbec_camera` in `~/ros2_ws` against current Jazzy packages.
 
-Runtime (see [`../Quick_Start.md`](../Quick_Start.md)): start `rmw_zenohd` on W2-0035 first. In Distrobox, `ZENOH_CONFIG_OVERRIDE` must target `tcp/192.168.111.223:7447`, then:
+## 6. Chassis
 
-```bash
-ros2 launch linkhou_s2_description chassis_ros2_control.launch.py \
-  can_iface:=bcan0 publish_robot_state:=false
-```
+Owned by the chassis bring-up owner (`s2_chassis_ws` / Distrobox). Start `rmw_zenohd` on W2 **first**; Distrobox `ZENOH_CONFIG_OVERRIDE` must point at **this** W2’s router (e.g. `tcp/192.168.110.69:7447` or `tcp/6.6.6.100:7447`).
 
-## 6. LAN HTTP
-
-If a system proxy blocks `:8087`:
+## 7. LAN HTTP
 
 ```bash
 export NO_PROXY="192.168.110.35,localhost,127.0.0.1"

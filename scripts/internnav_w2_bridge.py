@@ -10,11 +10,11 @@ actions on /cmd_vel:
 Does not use YOLO. Does not query Isaac prim poses.
 Dummy depth is used (DualVLN is RGB; the agent still indexes depth[:,:,0]).
 
-ROS 2 Jazzy rclpy is Python 3.12. InternNav conda is Python 3.10. Do NOT
+ROS 2 Jazzy rclpy is Python 3.12. InternNav uv venv is Python 3.10. Do NOT
 import rclpy inside internnav — this script talks to the InternNav server
 over HTTP, so it can run in the same 3.12 venv as detect_apple.py.
 
-On W2-0035 (ROS 2 Jazzy, not internnav conda):
+On W2-019 (ROS 2 Jazzy, not InternNav uv venv):
 
   python3 ~/internnav_w2_bridge.py \\
     --host 192.168.110.35 --rgb-topic /camera_head/color/image_raw \\
@@ -338,7 +338,7 @@ def _agent_settings(model_path: str, device: str) -> Dict[str, Any]:
 class InternNavHttpClient:
     """Same protocol as internnav.utils.AgentClient, without importing internnav.
 
-    Jazzy rclpy is CPython 3.12; internnav conda is 3.10. DualVLN stays in
+    Jazzy rclpy is CPython 3.12; InternNav uv venv is 3.10. DualVLN stays in
     the internnav process (start_server.py).
     """
 
@@ -396,7 +396,7 @@ def main() -> None:
     parser.add_argument(
         "--model-path",
         default="checkpoints/InternVLA-N1-DualVLN",
-        help="Path relative to the InternNav server process cwd (~/InternNav).",
+        help="Path relative to InternNav cwd on zy (e.g. checkpoints/InternVLA-N1-DualVLN or ...-SocialGen-10k-3ep-20261115).",
     )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--lin-x", type=float, default=0.20)
@@ -462,7 +462,7 @@ def main() -> None:
 
         node.get_logger().info(
             f"Connecting to InternNav HTTP {args.host}:{args.port} "
-            "(server process stays in internnav conda / Python 3.10)."
+            "(server process stays in InternNav uv venv / Python 3.10)."
         )
         agent = InternNavHttpClient(
             args.host, args.port, args.model_path, args.device

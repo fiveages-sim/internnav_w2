@@ -7,8 +7,8 @@
           │
           ▼
 ┌─────────────────────┐  HTTP :8087   ┌──────────────────────────┐
-│ W2-0035             │ ◄───────────► │ Sim-06                   │
-│ Gemini 336L         │  RGB + text   │ conda internnav          │
+│ W2-019             │ ◄───────────► │ zy                   │
+│ Gemini 336L         │  RGB + text   │ uv .venv (InternNav)    │
 │ internnav_w2_bridge │  actions      │ DualVLN Agent Server     │
 └─────────┬───────────┘               └──────────────────────────┘
           │ /cmd_vel
@@ -25,9 +25,9 @@
 |------|-----------|
 | Camera → bridge | ROS 2 on W2 (`/camera_head/color/image_raw`) |
 | Chassis ↔ W2 | ROS 2 Zenoh (`/cmd_vel`, `/chassis/odom`, `/chassis/joint_states`, …) |
-| W2 ↔ DualVLN | HTTP to Sim-06 `:8087` (not Zenoh) |
+| W2 ↔ DualVLN | HTTP to zy `:8087` (not Zenoh) |
 
-Sim-06 does **not** join the robot ROS graph. Do not load DualVLN on the 4060.
+zy does **not** join the robot ROS graph. Do not load DualVLN on the 4060.
 
 ## Discrete actions
 
@@ -43,9 +43,9 @@ Dry-run with a parked robot does **not** prove object search: the image never ch
 
 ## Zenoh
 
-**Router:** W2-0035, `ros2 run rmw_zenoh_cpp rmw_zenohd`, typically `tcp/192.168.111.223:7447`. Start this **before** the chassis launch. The camera launch should attach to the existing router (`Detected running rmw_zenohd`).
+**Router:** W2-019, `ros2 run rmw_zenoh_cpp rmw_zenohd`, typically `tcp/192.168.110.69:7447`. Start this **before** the chassis launch. The camera launch should attach to the existing router (`Detected running rmw_zenohd`).
 
-**Client:** 3588 Distrobox. `ZENOH_CONFIG_OVERRIDE` must be `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]` (`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` env files). Launch with `publish_robot_state:=false`.
+**Client:** 3588 Distrobox. `ZENOH_CONFIG_OVERRIDE` must be `mode="client";connect/endpoints=["tcp/192.168.110.69:7447"]` (`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` env files). Launch with `publish_robot_state:=false`.
 
 Two `rmw_zenohd` instances on 7447 will fail or split the graph. Do not `unset ZENOH_CONFIG_OVERRIDE` on the chassis.
 

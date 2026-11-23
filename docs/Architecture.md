@@ -7,8 +7,8 @@
           │
           ▼
 ┌─────────────────────┐  HTTP :8087   ┌──────────────────────────┐
-│ W2-0035             │ ◄───────────► │ Sim-06                   │
-│ Gemini 336L         │  RGB + text   │ conda internnav          │
+│ W2-019             │ ◄───────────► │ zy                   │
+│ Gemini 336L         │  RGB + text   │ uv .venv (InternNav)    │
 │ internnav_w2_bridge │  actions      │ DualVLN Agent Server     │
 └─────────┬───────────┘               └──────────────────────────┘
           │ /cmd_vel
@@ -25,9 +25,9 @@
 |------|-----------|
 | 相机 → bridge | W2 上的 ROS 2（`/camera_head/color/image_raw`） |
 | 底盘 ↔ W2 | ROS 2 Zenoh（`/cmd_vel`、`/chassis/odom`、`/chassis/joint_states`、…） |
-| W2 ↔ DualVLN | HTTP 到 Sim-06 `:8087`（不是 Zenoh） |
+| W2 ↔ DualVLN | HTTP 到 zy `:8087`（不是 Zenoh） |
 
-Sim-06 **不**加入机器人 ROS 图。不要在 4060 上加载 DualVLN。
+zy **不**加入机器人 ROS 图。不要在 4060 上加载 DualVLN。
 
 ## 离散动作
 
@@ -43,9 +43,9 @@ Sim-06 **不**加入机器人 ROS 图。不要在 4060 上加载 DualVLN。
 
 ## Zenoh
 
-**Router：** W2-0035，`ros2 run rmw_zenoh_cpp rmw_zenohd`，通常为 `tcp/192.168.111.223:7447`。在底盘 launch **之前**启动。相机 launch 应挂到已有 router（`Detected running rmw_zenohd`）。
+**Router：** W2-019，`ros2 run rmw_zenoh_cpp rmw_zenohd`，通常为 `tcp/192.168.110.69:7447`。在底盘 launch **之前**启动。相机 launch 应挂到已有 router（`Detected running rmw_zenohd`）。
 
-**Client：** 3588 Distrobox。`ZENOH_CONFIG_OVERRIDE` 必须为 `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`（`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` 环境文件）。Launch 使用 `publish_robot_state:=false`。
+**Client：** 3588 Distrobox。`ZENOH_CONFIG_OVERRIDE` 必须为 `mode="client";connect/endpoints=["tcp/192.168.110.69:7447"]`（`CHASSIS_ZENOH_REMOTE=1` / `s2_chassis_ws` 环境文件）。Launch 使用 `publish_robot_state:=false`。
 
 7447 上两个 `rmw_zenohd` 会失败或分裂图。不要在底盘上 `unset ZENOH_CONFIG_OVERRIDE`。
 

@@ -4,7 +4,7 @@
 # Official train_dual_system.sh is 8 nodes × 8 GPUs — do not run that here.
 #
 # Prereqs (on the A6000 PC):
-#   conda activate internnav
+#   source ~/SocialNav/InternNav/.venv/bin/activate
 #   cd ~/InternNav
 #   DualVLN (or System2) weights under checkpoints/InternVLA-N1-System2
 #     If you only have InternVLA-N1-DualVLN:

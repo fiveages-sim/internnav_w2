@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Save one head RGB frame (no GUI). Run on W2-0035 with the camera launch up."""
+"""Save one head RGB frame (no GUI). Run on W2-019 with the camera launch up."""
 
 from __future__ import annotations
 

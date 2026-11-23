@@ -6,13 +6,13 @@ Details that do not belong in the command-only [`Quick_Start.md`](../Quick_Start
 
 Linkhou `s2_chassis_ws` is owned by the chassis bring-up owner. **Do not edit it** unless they ask.
 
-After their 2026-09 graph change, W2 must run the Zenoh **router first**, and the 3588 must join as a **client** of `192.168.111.223:7447`. Launch with `publish_robot_state:=false`. Full command order: [`../Quick_Start.md`](../Quick_Start.md) **Z1 then C1**.
+After their 2026-09 graph change, W2 must run the Zenoh **router first**, and the 3588 must join as a **client** of `192.168.110.69:7447`. Launch with `publish_robot_state:=false`. Full command order: [`../Quick_Start.md`](../Quick_Start.md) **Z1 then C1**.
 
-1. On W2-0035: `ros2 run rmw_zenoh_cpp rmw_zenohd` (one process only).
+1. On W2-019: `ros2 run rmw_zenoh_cpp rmw_zenohd` (one process only).
 2. `ssh linux@192.168.111.61` (password `linux`) → `distrobox enter ubuntu24`.
 3. Stop any previous chassis launch.
 4. `echo "$ZENOH_CONFIG_OVERRIDE"` must be  
-   `mode="client";connect/endpoints=["tcp/192.168.111.223:7447"]`.  
+   `mode="client";connect/endpoints=["tcp/192.168.110.69:7447"]`.  
    If not: `source ~/s2_chassis_ws/.bashrc` **or** `export CHASSIS_ZENOH_REMOTE=1` then `source ~/s2_chassis_ws/config/chassis_env.conf`.
 5. `source ~/s2_chassis_ws/install/setup.bash`
 6. `ros2 launch linkhou_s2_description chassis_ros2_control.launch.py can_iface:=bcan0 publish_robot_state:=false`
@@ -25,10 +25,10 @@ Two `rmw_zenohd` instances on 7447 will fail or split the graph. Camera launch s
 
 ## Camera
 
-Launch: `gemini_330_series_head.launch.py` with `serial_number:=CPC6463000WX`.  
+Launch: `gemini_330_series_head.launch.py` with `serial_number:=CPC9363000CZ`.  
 Not `gemini_336.launch.py`. Not RealSense. Raw RGB is enough if compressed plugins fail.
 
-`rqt_image_view` needs a real display (NoMachine on W2, or `ssh -Y` from Sim-06). Cursor SSH will print `could not connect to display`. Use `scripts/save_head_rgb.py` as a fallback.
+`rqt_image_view` needs a real display (NoMachine on W2, or `ssh -Y` from zy). Cursor SSH will print `could not connect to display`. Use `scripts/save_head_rgb.py` as a fallback.
 
 ## Bridge
 
@@ -36,7 +36,7 @@ Not `gemini_336.launch.py`. Not RealSense. Raw RGB is enough if compressed plugi
 - `--no-use-sim-time` on hardware
 - `--dry-run` until you confirm `/chassis/odom`
 - `--no-tuck`; never `--tuck-body` (waist home can tip the base)
-- Slow live defaults used in lab: `--lin-x 0.08 --yaw-rate 0.12 --forward-m 0.10 --turn-deg 6 --step-pause 1.0`
+- Recommended first live: `--lin-x 0.15 --yaw-rate 0.25 --forward-m 0.25 --turn-deg 12 --step-pause 0.0` (e-stop ready). Use slower flags only if you need more time between motions.
 - Log line `Waiting for /head_camera/rgb` is leftover Isaac text
 - Exit `Aborted` / `rcl_shutdown already called` is rclpy teardown
 
